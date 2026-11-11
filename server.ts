@@ -39,6 +39,80 @@ app.get('/api/gemini/status', (_req, res) => {
   });
 });
 
+// Groq API Key configuration
+const groqApiKey = process.env.GROQ_API_KEY || '';
+
+app.get('/api/groq/status', (_req, res) => {
+  res.json({
+    available: !!groqApiKey,
+    message: groqApiKey
+      ? 'Groq API Key configurada com sucesso'
+      : 'GROQ_API_KEY aguardando configuração nos secrets',
+  });
+});
+
+// Groq proxy helper endpoint
+app.post('/api/groq/chat', async (req, res) => {
+  try {
+    if (!groqApiKey) {
+      return res.status(503).json({ error: 'GROQ_API_KEY não configurada no servidor.' });
+    }
+    const { messages, model = 'llama3-70b-8192' } = req.body;
+    
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${groqApiKey}`,
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.3 }),
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// OpenRouter API Key configuration
+const openRouterApiKey = process.env.OPENROUTER_API_KEY || '';
+
+app.get('/api/openrouter/status', (_req, res) => {
+  res.json({
+    available: !!openRouterApiKey,
+    message: openRouterApiKey
+      ? 'OpenRouter API Key configurada com sucesso'
+      : 'OPENROUTER_API_KEY aguardando configuração nos secrets',
+  });
+});
+
+// OpenRouter proxy helper endpoint
+app.post('/api/openrouter/chat', async (req, res) => {
+  try {
+    if (!openRouterApiKey) {
+      return res.status(503).json({ error: 'OPENROUTER_API_KEY não configurada no servidor.' });
+    }
+    const { messages, model = 'anthropic/claude-3.5-sonnet' } = req.body;
+    
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openRouterApiKey}`,
+        'HTTP-Referer': process.env.APP_URL || 'https://cifraviva.app',
+        'X-Title': 'CifraViva',
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.3 }),
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Intelligent search across library
 app.post('/api/gemini/search', async (req, res) => {
   try {

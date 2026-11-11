@@ -15,6 +15,7 @@ import {
   Upload,
   Globe,
   RefreshCw,
+  User,
 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { DemoBadge } from './DemoBadge';
@@ -29,6 +30,7 @@ interface HeaderProps {
   onNewSong: () => void;
   onOpenWebSearch?: () => void;
   onOpenBatchSync?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({

@@ -84,7 +84,14 @@ export const WebChordSearchModal: React.FC<WebChordSearchModalProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const textResponse = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(textResponse);
+      } catch {
+        throw new Error(`Erro no servidor (${res.status}): A resposta não retornou JSON válido. Verifique se o servidor backend está rodando ou se a chave GEMINI_API_KEY está configurada.`);
+      }
+
       if (data.error && !data.chordProContent) {
         throw new Error(data.error);
       }
