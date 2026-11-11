@@ -12,11 +12,30 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { PWAInstallButton } from '../components/common/PWAInstallButton';
+import { syncLocalSongsToSupabase, pullSongsFromSupabase, checkSupabaseStatus } from '../utils/supabaseSync';
+import { isSupabaseConfigured } from '../utils/supabaseClient';
 
 
 export const SettingsView: React.FC = () => {
   const { userPlan, setUserPlan, preferences, updatePreferences } = useAppStore();
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [sbStatus, setSbStatus] = useState<string>('');
+  const [sbLoading, setSbLoading] = useState(false);
+
+  const handleSyncToSupabase = async () => {
+    setSbLoading(true);
+    setSbStatus('Enviando...');
+    const r = await syncLocalSongsToSupabase();
+    setSbStatus(r.message);
+    setSbLoading(false);
+  };
+  const handlePullFromSupabase = async () => {
+    setSbLoading(true);
+    setSbStatus('Baixando...');
+    const r = await pullSongsFromSupabase();
+    setSbStatus(r.message);
+    setSbLoading(false);
+  };
 
 
 
@@ -200,6 +219,40 @@ export const SettingsView: React.FC = () => {
         <PWAInstallButton />
       </div>
 
+      {/* 4. SUPABASE SYNC */}
+      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+            <Info className="w-5 h-5 text-amber-400" /> Sincronização com Supabase
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            {isSupabaseConfigured
+              ? 'Supabase configurado. Envie suas músicas para a nuvem ou baixe de lá.'
+              : 'Supabase não configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env (local) e na Vercel.'}
+          </p>
+        </div>
+        {isSupabaseConfigured && (
+          <div className="flex flex-wrap gap-3">
+            <button
+              disabled={sbLoading}
+              onClick={handleSyncToSupabase}
+              className="px-4 py-2 rounded-xl bg-amber-500 text-slate-900 font-bold text-sm hover:bg-amber-400 disabled:opacity-50"
+            >
+              Enviar para Supabase
+            </button>
+            <button
+              disabled={sbLoading}
+              onClick={handlePullFromSupabase}
+              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-100 font-bold text-sm hover:bg-slate-700 disabled:opacity-50"
+            >
+              Baixar do Supabase
+            </button>
+          </div>
+        )}
+        {sbStatus && (
+          <p className="text-xs text-slate-300 mt-2">{sbStatus}</p>
+        )}
+      </div>
 
     </div>
   );
