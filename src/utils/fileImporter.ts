@@ -1,6 +1,6 @@
 import mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
-import { isChord, parseChordPro } from './chordPro';
+import { isChord, isChordLine, mergeChordAndLyricLines, parseChordPro } from './chordPro';
 import type { Song, SongType, SongStatus } from '../types';
 
 // Configure PDF.js worker to standard cdnjs worker if available or fallback inline
@@ -51,7 +51,13 @@ export async function extractTextFromFile(file: File): Promise<{ text: string; i
   if (extension === 'docx') {
     const arrayBuffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer });
-    return { text: result.value, isScanned: false };
+    // Word devolve um paragrafo vazio entre cada linha real; sem isso o
+    // acorde nunca fica adjacente a letra e a fusao falha.
+    const text = result.value
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\n{2,}/g, '\n');
+    return { text, isScanned: false };
   }
 
   if (extension === 'pdf') {
@@ -64,18 +70,53 @@ export async function extractTextFromFile(file: File): Promise<{ text: string; i
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        let lastY: number | null = null;
-        let pageStr = '';
+        const items = (textContent.items as any[]).filter((it) => it.str && it.str.trim() !== '');
 
-        for (const item of textContent.items as any[]) {
-          if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
-            pageStr += '\n';
-          }
-          pageStr += item.str + ' ';
-          lastY = item.transform[5];
+        if (!items.length) {
+          fullText += '\n';
+          continue;
         }
 
-        fullText += pageStr + '\n\n';
+        // Largura media de caractere: usa o item mais longo como referencia,
+        // porque ele tem menos erro relativo de arredondamento.
+        const measured = items
+          .filter((it) => it.str.trim().length > 1 && it.width > 0)
+          .map((it) => it.width / it.str.length)
+          .sort((a, b) => a - b);
+        const longest = items
+          .filter((it) => it.str.trim().length > 2 && it.width > 0)
+          .sort((a, b) => b.str.length - a.str.length)[0];
+        const charWidth = longest
+          ? longest.width / longest.str.length
+          : measured.length
+            ? measured[Math.floor(measured.length / 2)]
+            : 5.4;
+
+        // Agrupa por linha (Y) e reconstroi a coluna X de cada item
+        const rows = new Map<number, { x: number; s: string }[]>();
+        for (const item of items) {
+          const y = Math.round(item.transform[5] / 2) * 2;
+          if (!rows.has(y)) rows.set(y, []);
+          rows.get(y)!.push({ x: item.transform[4], s: item.str });
+        }
+
+        const ys = [...rows.keys()].sort((a, b) => b - a);
+        for (const y of ys) {
+          const row = rows.get(y)!.sort((a, b) => a.x - b.x);
+          const x0 = row[0].x;
+          let line = '';
+          for (const it of row) {
+            const col = Math.max(0, Math.round((it.x - x0) / charWidth));
+            if (line.length < col) {
+              line += ' '.repeat(col - line.length);
+            } else if (line.length > col) {
+              line += ' ';
+            }
+            line += it.s;
+          }
+          fullText += line.replace(/\s+$/, '') + '\n';
+        }
+        fullText += '\n';
       }
 
       // Check if text is extremely short relative to pages (likely scanned PDF)
@@ -213,62 +254,212 @@ export function parseRepertoireList(text: string): ParsedImportedSong[] {
 }
 
 /**
+ * Reconhece rótulos de seção ("Intro", "[Verso 1]", "Refrão:"...).
+ * Retorna o nome normalizado ou null.
+ */
+const SECTION_BRACKET_RE = /^\[(intro|introdução|introducao|verso\s*\d*|refrão|refrao|ponte|solo|final|instrumental|interlúdio|interludio|base|coda|pre[- ]?refrão|pre[- ]?refrao)\b[^\]]*\]$/i;
+const SECTION_LINE_RE = /^(intro|introdução|introducao|verso\s*\d*|refrão|refrao|ponte|solo|final|instrumental|interlúdio|interludio|base|coda|pre[- ]?refrão|pre[- ]?refrao)\s*:?\s*$/i;
+
+function sectionLabel(line: string): string | null {
+  const raw = line.trim();
+  let match = SECTION_BRACKET_RE.exec(raw);
+  if (match) {
+    const inner = raw.slice(1, -1).trim().replace(/:$/, '');
+    return inner.charAt(0).toUpperCase() + inner.slice(1);
+  }
+  match = SECTION_LINE_RE.exec(raw);
+  if (match) {
+    const inner = raw.replace(/:$/, '').trim();
+    return inner.charAt(0).toUpperCase() + inner.slice(1);
+  }
+  return null;
+}
+
+/**
+ * Converte texto "acorde em cima / letra embaixo" em ChordPro ([D]letra),
+ * transformando rótulos de seção em {section: X}.
+ * `skipLines` permite ignorar linhas já consumidas como metadados.
+ */
+export function toChordPro(rawText: string, skipLines?: Set<number>): string {
+  const text = rawText.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');
+  const lines = text.split('\n');
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (skipLines?.has(i)) continue;
+
+    const line = lines[i].replace(/\s+$/, '');
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      out.push('');
+      continue;
+    }
+
+    const section = sectionLabel(trimmed);
+    if (section) {
+      out.push(`{section: ${section}}`);
+      continue;
+    }
+
+    if (/^\{.*\}$/.test(trimmed)) {
+      out.push(trimmed);
+      continue;
+    }
+
+    if (isChordLine(line)) {
+      // A letra pode estar separada por até 2 linhas em branco (Word/PDF).
+      let j = i + 1;
+      let blanks = 0;
+      while (j < lines.length && lines[j].trim() === '' && blanks < 2) {
+        j++;
+        blanks++;
+      }
+      const nextLine = j < lines.length ? lines[j] : null;
+
+      if (
+        nextLine !== null &&
+        !skipLines?.has(j) &&
+        nextLine.trim() !== '' &&
+        !isChordLine(nextLine) &&
+        !sectionLabel(nextLine.trim()) &&
+        !/^\{.*\}$/.test(nextLine.trim())
+      ) {
+        out.push(mergeChordAndLyricLines(line, nextLine.replace(/\s+$/, '')));
+        i = j;
+      } else {
+        out.push(trimmed.replace(/\s{2,}/g, '  '));
+      }
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  return out
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Heurística simples de tom: usa o último acorde do conteúdo.
+ */
+function detectKeyFromContent(content: string): string {
+  const chords = [...content.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1]).filter(isChord);
+  if (!chords.length) return '';
+  const last = chords[chords.length - 1];
+  const root = /^([A-G][#b]?)(m)?/.exec(last);
+  if (!root) return '';
+  return root[1] + (root[2] ? 'm' : '');
+}
+
+/**
  * Parses full songs from raw text (Word/PDF document with chords and lyrics)
  */
 export function parseFullSongDocument(text: string, fileName: string): ParsedImportedSong[] {
-  const lines = text.split(/\r?\n/);
-  const titleFallback = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  const normalized = text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');
+  const lines = normalized.split('\n');
+  const titleFallback = fileName
+    .replace(/\.[^/.]+$/, '')
+    .replace(/^(cifra|cifras|letra)\s*[-–—]\s*/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+
+  const warnings: string[] = [];
+  const consumed = new Set<number>();
 
   let extractedTitle = '';
   let extractedArtist = '';
-  let extractedKey = 'G';
+  let extractedKey = '';
   let extractedCapo = 0;
   let extractedBpm = 100;
-  const warnings: string[] = [];
 
-  // Check top lines for metadata
-  for (let i = 0; i < Math.min(10, lines.length); i++) {
+  // 1) Metadados explícitos (Tom / Capo / BPM)
+  for (let i = 0; i < Math.min(15, lines.length); i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    const tomMatch = line.match(/tom:\s*([A-G][#b]?(m|maj|7|7M|m7)?)/i);
+    const tomMatch = line.match(
+      /^(?:tom|tonalidade|key)\s*[:\-]\s*([A-G][#b]?(?:m|maj|min|dim|aug|sus[24]?|add[249]?|[2-9]|1[13]|7M|m7b5)*)$/i
+    );
     if (tomMatch) {
       extractedKey = tomMatch[1];
+      consumed.add(i);
       continue;
     }
 
-    const capoMatch = line.match(/capo(traste)?:\s*(\d+)/i);
+    const capoMatch = line.match(/^(?:capo|capotraste)\s*[:\-]?\s*(\d+)/i);
     if (capoMatch) {
-      extractedCapo = parseInt(capoMatch[2], 10);
+      extractedCapo = parseInt(capoMatch[1], 10) || 0;
+      consumed.add(i);
       continue;
     }
 
-    const bpmMatch = line.match(/bpm:\s*(\d+)/i);
+    const bpmMatch = line.match(/^(?:bpm|andamento|batida)\s*[:\-]\s*(\d+)/i);
     if (bpmMatch) {
-      extractedBpm = parseInt(bpmMatch[1], 10);
-      continue;
-    }
-
-    if (!extractedTitle && !line.startsWith('{') && !line.includes(':') && !isChord(line)) {
-      extractedTitle = line;
-      continue;
-    }
-
-    if (extractedTitle && !extractedArtist && !line.startsWith('{') && !line.includes(':') && !isChord(line)) {
-      extractedArtist = line;
+      extractedBpm = parseInt(bpmMatch[1], 10) || 100;
+      consumed.add(i);
       continue;
     }
   }
 
-  // Parse using ChordPro parser
-  const parsedDoc = parseChordPro(text);
-  const finalTitle = parsedDoc.title || extractedTitle || titleFallback;
+  // 2) Título e artista a partir das primeiras linhas "de conteúdo"
+  const candidates = lines
+    .map((l, i) => ({ text: l.trim(), i }))
+    .filter(
+      ({ text, i }) =>
+        text.length > 0 &&
+        !consumed.has(i) &&
+        !sectionLabel(text) &&
+        !isChordLine(text) &&
+        !/^\{.*\}$/.test(text)
+    );
+
+  if (candidates.length) {
+    const first = candidates[0];
+    const split = /^(.{2,}?)\s+[–—|-]\s+(.{1,})$/u.exec(first.text);
+
+    if (split) {
+      extractedTitle = split[1].trim();
+      extractedArtist = split[2].trim();
+      consumed.add(first.i);
+    } else {
+      extractedTitle = first.text;
+      consumed.add(first.i);
+
+      const second = candidates[1];
+      if (second && second.i === first.i + 1) {
+        const t = second.text;
+        const words = t.split(/\s+/).length;
+        const looksLikeName =
+          t.length >= 2 &&
+          t.length <= 40 &&
+          words <= 5 &&
+          !/[.!?;:]$/.test(t) &&
+          !/\d{2,}/.test(t);
+        if (looksLikeName) {
+          extractedArtist = t;
+          consumed.add(second.i);
+        }
+      }
+    }
+  }
+
+  const chordProContent = toChordPro(normalized, consumed);
+
+  // Parse usando o parser ChordPro para validar/acrescentar metadados
+  const parsedDoc = parseChordPro(chordProContent);
+  const finalTitle = parsedDoc.title || extractedTitle || titleFallback || 'Sem título';
   const finalArtist = parsedDoc.artist || extractedArtist || '';
-  const finalKey = parsedDoc.key || extractedKey;
+  const finalKey = parsedDoc.key || extractedKey || detectKeyFromContent(chordProContent);
   const finalCapo = parsedDoc.capo ?? extractedCapo;
 
-  if (parsedDoc.uniqueChords.length === 0) {
+  if (!parsedDoc.uniqueChords.length) {
     warnings.push('Nenhum acorde identificado no arquivo. Importado como letra sem cifra.');
+  }
+  if (!extractedTitle && !parsedDoc.title) {
+    warnings.push('Título não encontrado no arquivo; usei o nome do arquivo.');
   }
 
   return [
@@ -281,8 +472,8 @@ export function parseFullSongDocument(text: string, fileName: string): ParsedImp
       capo: finalCapo,
       type: 'repertorio',
       status: parsedDoc.uniqueChords.length > 0 ? 'rascunho' : 'pendente',
-      chordProContent: text,
-      rawText: text,
+      chordProContent,
+      rawText: normalized,
       confidence: parsedDoc.uniqueChords.length > 0 ? 'alta' : 'media',
       warnings,
       action: 'create',

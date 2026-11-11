@@ -12,6 +12,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { parseChordPro } from '../../utils/chordPro';
+import { postJson } from '../../utils/api';
 import { ALL_KEYS } from '../../utils/transposer';
 import type { Song } from '../../types';
 
@@ -75,22 +76,10 @@ export const WebChordSearchModal: React.FC<WebChordSearchModalProps> = ({
     setResult(null);
 
     try {
-      const res = await fetch('/api/gemini/suggest-chords', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: searchTitle.trim(),
-          artist: searchArtist.trim(),
-        }),
+      const data = await postJson<any>('/api/gemini/suggest-chords', {
+        title: searchTitle.trim(),
+        artist: searchArtist.trim(),
       });
-
-      const textResponse = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(textResponse);
-      } catch {
-        throw new Error(`Erro no servidor (${res.status}): A resposta não retornou JSON válido. Verifique se o servidor backend está rodando ou se a chave GEMINI_API_KEY está configurada.`);
-      }
 
       if (data.error && !data.chordProContent) {
         throw new Error(data.error);

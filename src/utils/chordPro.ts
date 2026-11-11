@@ -46,10 +46,13 @@ export function isChord(text: string): boolean {
 export function isChordLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  const words = trimmed.split(/\s+/);
+  if (/^\[[^\]]+\]$/.test(trimmed)) return false; // rótulo de seção, não acorde
+  const words = trimmed
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && !/^[|,;:.\-–—]+$/.test(w));
   if (words.length === 0) return false;
-  const chordCount = words.filter(isChord).length;
-  return chordCount / words.length >= 0.7;
+  const chordCount = words.filter((w) => isChord(w.replace(/[|,;]+$/, ''))).length;
+  return chordCount > 0 && chordCount / words.length >= 0.7;
 }
 
 /**
@@ -100,18 +103,21 @@ export function mergeChordAndLyricLines(chordLine: string, lyricLine: string): s
   let match;
 
   while ((match = regex.exec(chordLine)) !== null) {
-    chordMatches.push({ chord: match[0], index: match.index });
+    const chord = match[0].replace(/^[|,;]+/g, '').replace(/[|,;]+$/g, '');
+    // Ignora separadores de compasso e tokens que não são acordes
+    if (chord && isChord(chord)) {
+      chordMatches.push({ chord, index: match.index });
+    }
   }
 
   if (chordMatches.length === 0) return lyricLine;
 
   let currentLyricIndex = 0;
-  for (let i = 0; i < chordMatches.length; i++) {
-    const { chord, index } = chordMatches[i];
-    // Add lyrics between current index and chord index
-    if (index > currentLyricIndex && index <= lyricLine.length) {
-      result += lyricLine.substring(currentLyricIndex, index);
-      currentLyricIndex = index;
+  for (const { chord, index } of chordMatches) {
+    const pos = Math.min(index, lyricLine.length);
+    if (pos > currentLyricIndex) {
+      result += lyricLine.substring(currentLyricIndex, pos);
+      currentLyricIndex = pos;
     }
     result += `[${chord}]`;
   }
