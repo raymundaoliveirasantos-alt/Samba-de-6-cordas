@@ -115,7 +115,7 @@ export interface UserPreferences {
   theme: 'dark' | 'light' | 'stage';
   showChords: boolean;
   showDiagrams: boolean;
-  instrument: 'violao' | 'teclado' | 'baixo' | 'ukulele';
+  instrument: 'violao' | 'cavaquinho' | 'teclado' | 'baixo' | 'ukulele';
   useNashvilleNumbers: boolean;
   autoScrollSpeed: number;
 }

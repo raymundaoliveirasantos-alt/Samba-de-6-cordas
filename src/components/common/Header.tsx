@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Plus,
   Upload,
+  Globe,
 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { DemoBadge } from './DemoBadge';
@@ -25,6 +26,8 @@ interface HeaderProps {
   onOpenStageMode: () => void;
   onOpenImport: () => void;
   onNewSong: () => void;
+  onOpenWebSearch?: () => void;
+  onOpenBatchSync?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +36,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenStageMode,
   onOpenImport,
   onNewSong,
+  onOpenWebSearch,
+  onOpenBatchSync,
 }) => {
   const { currentWorkspaceId, setWorkspaceId, userPlan, isOnline } = useAppStore();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -176,6 +181,18 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2">
           {/* Demo Local Badge */}
           <DemoBadge className="hidden sm:inline-flex" />
+
+          {/* Quick Web Search Button */}
+          {onOpenWebSearch && (
+            <button
+              onClick={onOpenWebSearch}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold border border-slate-700 hover:border-amber-500/40 transition"
+              title="Buscar cifras na web (Google & Cifra Club)"
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline">Buscar na Web</span>
+            </button>
+          )}
 
           {/* Quick Import Button */}
           <button

@@ -14,6 +14,7 @@ import {
   Music,
   CheckCircle,
   AlertTriangle,
+  Globe,
 } from 'lucide-react';
 import type { Setlist, Song } from '../types';
 import { db } from '../db';
@@ -25,6 +26,7 @@ interface SetlistDetailViewProps {
   onBack: () => void;
   onSelectSong: (song: Song) => void;
   onStartStageMode: (setlist: Setlist, startIdx: number) => void;
+  onOpenWebSearch?: (song: Song) => void;
 }
 
 export const SetlistDetailView: React.FC<SetlistDetailViewProps> = ({
@@ -32,6 +34,7 @@ export const SetlistDetailView: React.FC<SetlistDetailViewProps> = ({
   onBack,
   onSelectSong,
   onStartStageMode,
+  onOpenWebSearch,
 }) => {
   const { userPlan } = useAppStore();
   const [currentSetlist, setCurrentSetlist] = useState<Setlist>(setlist);
@@ -329,6 +332,18 @@ export const SetlistDetailView: React.FC<SetlistDetailViewProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Quick Web Search for pending songs in setlist */}
+                {isPending && song && onOpenWebSearch && (
+                  <button
+                    onClick={() => onOpenWebSearch(song)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold transition"
+                    title="Buscar cifra na web para esta música"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden md:inline">Buscar Cifra</span>
+                  </button>
+                )}
 
                 {/* Key Selector for this Setlist */}
                 <div className="flex items-center gap-1.5">

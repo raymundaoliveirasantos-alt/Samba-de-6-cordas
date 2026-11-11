@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronUp,
   ChevronDown,
@@ -16,11 +16,14 @@ import {
   Edit3,
   ExternalLink,
   Volume2,
+  Globe,
+  Layers,
 } from 'lucide-react';
 import type { Song } from '../../types';
 import { parseChordPro, transposeChordProContent } from '../../utils/chordPro';
 import { ALL_KEYS, calculateKeyDifference, getPlayShapeKeyWithCapo, getSoundingKeyWithCapo } from '../../utils/transposer';
 import { ChordDiagramModal } from '../chords/ChordDiagramModal';
+import { SvgChordDiagram } from '../chords/SvgChordDiagram';
 import { useAppStore } from '../../store';
 import { liveSync } from '../../utils/syncChannel';
 
@@ -29,6 +32,7 @@ interface ChordViewerProps {
   onEditSong?: () => void;
   onImportForSong?: () => void;
   onAiSuggest?: () => void;
+  onOpenWebSearch?: () => void;
   onOpenStageMode?: () => void;
   onOpenProjection?: () => void;
   isAutoral?: boolean;
@@ -39,6 +43,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   onEditSong,
   onImportForSong,
   onAiSuggest,
+  onOpenWebSearch,
   onOpenStageMode,
   onOpenProjection,
   isAutoral = song.type === 'autoral',
@@ -60,6 +65,7 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
 
   // YouTube player drawer
   const [showVideo, setShowVideo] = useState<boolean>(false);
+  const [showAllChordsPalette, setShowAllChordsPalette] = useState<boolean>(true);
 
   // Sync current key if song changes
   useEffect(() => {
@@ -166,6 +172,19 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
   );
 
   const parsedDoc = parseChordPro(transposedContent);
+
+  // Extract unique chords from song for immediate instrument palette display
+  const uniqueChords = useMemo(() => {
+    const list: string[] = [];
+    parsedDoc.lines.forEach((line) => {
+      line.tokens?.forEach((tok) => {
+        if (tok.chord && !list.includes(tok.chord)) {
+          list.push(tok.chord);
+        }
+      });
+    });
+    return list;
+  }, [parsedDoc]);
 
   // Font size mapping
   const fontSizeClasses = {
@@ -274,17 +293,46 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
             Graus 1-7
           </button>
 
-          {/* Instrument Diagram Selector */}
+          {/* Instrument Diagram Selector (Violão, Cavaquinho, Contrabaixo, Teclado, Ukulele) */}
           <select
             value={preferences.instrument}
             onChange={(e) => updatePreferences({ instrument: e.target.value as any })}
-            className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer hidden md:block"
+            className="bg-slate-800 border border-slate-700 text-amber-300 font-semibold text-xs rounded-xl px-2.5 py-1 focus:outline-none cursor-pointer"
           >
-            <option value="violao">Violão / Guitarra</option>
-            <option value="teclado">Teclado</option>
-            <option value="baixo">Baixo (Cifra + Tônica)</option>
-            <option value="ukulele">Ukulele</option>
+            <option value="violao">🎸 Violão (6 cordas)</option>
+            <option value="cavaquinho">🪕 Cavaquinho (D-G-B-D)</option>
+            <option value="baixo">🎻 Contrabaixo (Tônica + 5ª)</option>
+            <option value="teclado">🎹 Teclado</option>
+            <option value="ukulele">🌺 Ukulele</option>
           </select>
+
+          {/* Toggle All Chords Palette Button */}
+          {uniqueChords.length > 0 && (
+            <button
+              onClick={() => setShowAllChordsPalette(!showAllChordsPalette)}
+              className={`p-1.5 px-2 rounded-xl border text-xs font-semibold flex items-center gap-1 transition ${
+                showAllChordsPalette
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+              }`}
+              title="Exibir ou ocultar a paleta de diagramas de acordes desta música"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Acordes ({uniqueChords.length})</span>
+            </button>
+          )}
+
+          {/* Web Search Button */}
+          {onOpenWebSearch && (
+            <button
+              onClick={onOpenWebSearch}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-750 text-amber-300 hover:text-amber-200 border border-slate-700 hover:border-amber-500/40 text-xs font-semibold transition"
+              title="Buscar cifra na Web (Google & Cifra Club)"
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Buscar na Web</span>
+            </button>
+          )}
 
           {/* YouTube Video Drawer Button */}
           {song.youtubeUrl && (
@@ -339,6 +387,78 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
+          </div>
+        </div>
+      )}
+
+      {/* Unique Chords Horizontal Palette Drawer for the Selected Instrument */}
+      {showAllChordsPalette && uniqueChords.length > 0 && (
+        <div className="bg-slate-900/95 border-b border-slate-800 px-4 py-3 shadow-inner animate-in fade-in">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-400">
+                  {preferences.instrument === 'cavaquinho'
+                    ? '🪕 Cavaquinho (Ré - Sol - Si - Ré)'
+                    : preferences.instrument === 'baixo'
+                    ? '🎻 Contrabaixo (Tônica, 5ª e 3ª para Baixaria/Walking Bass)'
+                    : preferences.instrument === 'violao'
+                    ? '🎸 Violão (6 cordas E-A-D-G-B-E)'
+                    : `Acordes para ${preferences.instrument}`}
+                </span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  {uniqueChords.length} acordes
+                </span>
+              </div>
+
+              {/* Quick Instrument Switcher Pills inside the drawer */}
+              <div className="flex items-center gap-1 text-[11px] bg-slate-950/80 p-0.5 rounded-lg border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => updatePreferences({ instrument: 'violao' })}
+                  className={`px-2 py-0.5 rounded transition ${
+                    preferences.instrument === 'violao' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Violão
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updatePreferences({ instrument: 'cavaquinho' })}
+                  className={`px-2 py-0.5 rounded transition ${
+                    preferences.instrument === 'cavaquinho' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Cavaquinho
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updatePreferences({ instrument: 'baixo' })}
+                  className={`px-2 py-0.5 rounded transition ${
+                    preferences.instrument === 'baixo' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Contrabaixo
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-thin">
+              {uniqueChords.map((ch) => (
+                <div
+                  key={ch}
+                  onClick={() => setSelectedChordForModal(ch)}
+                  className="flex-shrink-0 cursor-pointer hover:scale-105 transition-transform p-1 rounded-xl hover:bg-slate-800/80"
+                  title={`Clique para ouvir e ver em detalhes: ${ch}`}
+                >
+                  <SvgChordDiagram
+                    chord={ch}
+                    instrument={preferences.instrument as any}
+                    compact
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -419,13 +539,24 @@ export const ChordViewer: React.FC<ChordViewerProps> = ({
               </p>
 
               <div className="flex flex-wrap items-center justify-center gap-3">
+                {/* Web Search Button (Google / Cifra Club) */}
+                {onOpenWebSearch && (
+                  <button
+                    onClick={onOpenWebSearch}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-md shadow-amber-500/20 transition cursor-pointer"
+                  >
+                    <Globe className="w-4 h-4" />
+                    Buscar Cifra na Web
+                  </button>
+                )}
+
                 {onImportForSong && (
                   <button
                     onClick={onImportForSong}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-md transition"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm border border-slate-700 transition"
                   >
-                    <Upload className="w-4 h-4" />
-                    Inserir Conteúdo (.docx / .pdf)
+                    <Upload className="w-4 h-4 text-amber-400" />
+                    Inserir Arquivo (.docx / .pdf)
                   </button>
                 )}
 

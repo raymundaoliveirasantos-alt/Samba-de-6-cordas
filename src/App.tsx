@@ -15,6 +15,8 @@ import { ChordViewer } from './components/songs/ChordViewer';
 import { SongEditor } from './components/songs/SongEditor';
 import { FileImportModal } from './components/import/FileImportModal';
 import { AiReviewModal } from './components/songs/AiReviewModal';
+import { WebChordSearchModal } from './components/songs/WebChordSearchModal';
+import { BatchWebSyncModal } from './components/songs/BatchWebSyncModal';
 import { StageModeView } from './pages/StageModeView';
 import { ProjectionView } from './pages/ProjectionView';
 import { liveSync } from './utils/syncChannel';
@@ -31,6 +33,10 @@ export default function App() {
   const [isEditingSong, setIsEditingSong] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [targetSongIdForImport, setTargetSongIdForImport] = useState<string | undefined>(undefined);
+  const [isWebSearchModalOpen, setIsWebSearchModalOpen] = useState(false);
+  const [webSearchTargetSong, setWebSearchTargetSong] = useState<Song | null>(null);
+  const [isBatchSyncModalOpen, setIsBatchSyncModalOpen] = useState(false);
+  const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
 
   // Stage Mode
   const [stageModeData, setStageModeData] = useState<{
@@ -134,6 +140,67 @@ export default function App() {
       suggestedKey: 'G',
       confidence: 'alta',
     });
+  };
+
+  // Open Web Search Modal for a song or globally
+  const handleOpenWebSearch = (song?: Song) => {
+    setWebSearchTargetSong(song || selectedSong || null);
+    setIsWebSearchModalOpen(true);
+  };
+
+  // Save chord retrieved from the web
+  const handleSaveWebChord = async (result: {
+    title: string;
+    artist: string;
+    key: string;
+    bpm: number;
+    chordProContent: string;
+    notes?: string;
+  }) => {
+    if (webSearchTargetSong) {
+      // Update existing song
+      await db.songs.update(webSearchTargetSong.id, {
+        chordProContent: result.chordProContent,
+        originalKey: result.key || webSearchTargetSong.originalKey,
+        currentKey: result.key || webSearchTargetSong.currentKey,
+        bpm: result.bpm || webSearchTargetSong.bpm,
+        status: 'pronto',
+        origin: 'sugestao_ia',
+        updatedAt: new Date().toISOString(),
+      });
+
+      const updated = await db.songs.get(webSearchTargetSong.id);
+      if (updated) {
+        if (selectedSong?.id === updated.id) {
+          setSelectedSong(updated);
+        }
+      }
+    } else {
+      // Create new song in library
+      const newSong: Song = {
+        id: `song-${Date.now()}`,
+        title: result.title,
+        artist: result.artist,
+        originalKey: result.key || 'G',
+        currentKey: result.key || 'G',
+        mode: 'major',
+        bpm: result.bpm || 100,
+        timeSignature: '4/4',
+        capo: 0,
+        chordProContent: result.chordProContent,
+        tags: ['Web'],
+        origin: 'sugestao_ia',
+        type: 'repertorio',
+        status: 'pronto',
+        notes: result.notes || '',
+        isFavorite: false,
+        workspaceId: 'ws-ss-clarinetes',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await db.songs.add(newSong);
+      setSelectedSong(newSong);
+    }
   };
 
   // Save edited song
@@ -257,6 +324,7 @@ export default function App() {
           setIsImportModalOpen(true);
         }}
         onNewSong={handleCreateNewSong}
+        onOpenWebSearch={() => handleOpenWebSearch()}
       />
 
       {/* Main View Router */}
@@ -309,6 +377,7 @@ export default function App() {
                     setIsImportModalOpen(true);
                   }}
                   onAiSuggest={() => handleAiSuggestForSong(selectedSong)}
+                  onOpenWebSearch={() => handleOpenWebSearch(selectedSong)}
                   onOpenStageMode={() => {
                     setStageModeData({
                       isActive: true,
@@ -327,6 +396,7 @@ export default function App() {
             onBack={() => setSelectedSetlist(null)}
             onSelectSong={(song) => setSelectedSong(song)}
             onStartStageMode={handleStartStageMode}
+            onOpenWebSearch={(song) => handleOpenWebSearch(song)}
           />
         ) : (
           <>
@@ -338,6 +408,7 @@ export default function App() {
                   setIsImportModalOpen(true);
                 }}
                 onNewSong={handleCreateNewSong}
+                onOpenWebSearch={(song) => handleOpenWebSearch(song)}
               />
             )}
             {currentTab === 'setlists' && (
@@ -409,6 +480,17 @@ export default function App() {
           }
         />
       )}
+
+      {/* Web Chord Search Modal (Google Search Grounding & Cifra Club) */}
+      <WebChordSearchModal
+        isOpen={isWebSearchModalOpen}
+        onClose={() => {
+          setIsWebSearchModalOpen(false);
+          setWebSearchTargetSong(null);
+        }}
+        targetSong={webSearchTargetSong}
+        onSaveChord={handleSaveWebChord}
+      />
     </div>
   );
 }

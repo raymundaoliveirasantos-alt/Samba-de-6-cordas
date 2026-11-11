@@ -3,11 +3,12 @@ import { Volume2, X, Music } from 'lucide-react';
 import { SvgChordDiagram } from './SvgChordDiagram';
 import { audioEngine } from '../../utils/audioEngine';
 import { chordToNashville } from '../../utils/transposer';
+import type { SupportedInstrument } from '../../utils/chordDiagrams';
 
 interface ChordDiagramModalProps {
   chord: string | null;
   songKey?: string;
-  defaultInstrument?: 'violao' | 'teclado' | 'baixo' | 'ukulele';
+  defaultInstrument?: SupportedInstrument;
   onClose: () => void;
 }
 
@@ -17,7 +18,7 @@ export const ChordDiagramModal: React.FC<ChordDiagramModalProps> = ({
   defaultInstrument = 'violao',
   onClose,
 }) => {
-  const [instrument, setInstrument] = useState<'violao' | 'teclado' | 'baixo' | 'ukulele'>(defaultInstrument);
+  const [instrument, setInstrument] = useState<SupportedInstrument>(defaultInstrument);
   const [isPlaying, setIsPlaying] = useState(false);
 
   if (!chord) return null;
@@ -53,7 +54,7 @@ export const ChordDiagramModal: React.FC<ChordDiagramModalProps> = ({
         </div>
 
         {/* Instrument Switcher Tabs */}
-        <div className="grid grid-cols-4 gap-1 p-1 my-4 bg-slate-950/80 rounded-xl border border-slate-800 text-xs font-medium">
+        <div className="grid grid-cols-5 gap-1 p-1 my-4 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] font-medium">
           <button
             onClick={() => setInstrument('violao')}
             className={`py-1.5 rounded-lg transition ${
@@ -63,12 +64,12 @@ export const ChordDiagramModal: React.FC<ChordDiagramModalProps> = ({
             Violão
           </button>
           <button
-            onClick={() => setInstrument('teclado')}
+            onClick={() => setInstrument('cavaquinho')}
             className={`py-1.5 rounded-lg transition ${
-              instrument === 'teclado' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'
+              instrument === 'cavaquinho' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Teclado
+            Cavaco
           </button>
           <button
             onClick={() => setInstrument('baixo')}
@@ -77,6 +78,14 @@ export const ChordDiagramModal: React.FC<ChordDiagramModalProps> = ({
             }`}
           >
             Baixo
+          </button>
+          <button
+            onClick={() => setInstrument('teclado')}
+            className={`py-1.5 rounded-lg transition ${
+              instrument === 'teclado' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Teclado
           </button>
           <button
             onClick={() => setInstrument('ukulele')}

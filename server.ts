@@ -101,63 +101,175 @@ Se nenhuma música corresponder, retorne uma lista vazia.`;
   }
 });
 
-// Suggest chords & structure for non-autoral songs (or hymns / public domain)
-app.post('/api/gemini/suggest-chords', async (req, res) => {
+// Helper for calling Gemini with retry and exponential backoff
+async function callGeminiWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      attempt++;
+      const errMsg = err?.message || JSON.stringify(err);
+      const isTransient =
+        err?.status === 503 ||
+        err?.status === 429 ||
+        errMsg.includes('high demand') ||
+        errMsg.includes('UNAVAILABLE') ||
+        errMsg.includes('RESOURCE_EXHAUSTED');
+
+      if (isTransient && attempt < maxRetries) {
+        const delay = attempt * 1200;
+        console.warn(`Gemini API transient failure. Retrying attempt ${attempt}/${maxRetries} after ${delay}ms...`);
+        await new Promise((res) => setTimeout(res, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error('Falha ao conectar com o serviço de busca');
+}
+
+// Clean and extract JSON from model response
+function extractJsonFromModelText(text: string): any {
+  if (!text) return {};
+  // Check for ```json ... ``` blocks
+  const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  const rawJson = jsonBlockMatch ? jsonBlockMatch[1] : text;
   try {
-    const { title, artist, isAutoral } = req.body;
-    if (isAutoral) {
-      return res.status(400).json({
-        error: 'Músicas autorais não são buscadas na internet nem geradas por IA por regra do aplicativo.',
+    return JSON.parse(rawJson);
+  } catch {
+    // Try finding first { and last }
+    const firstBrace = rawJson.indexOf('{');
+    const lastBrace = rawJson.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(rawJson.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error('Não foi possível interpretar a resposta da cifra.');
+  }
+}
+
+import { findInWebChordDatabase } from './src/utils/webChordsDatabase';
+
+// Search chords on the web using Google Search Grounding + Curated Fallback
+app.post('/api/gemini/suggest-chords', async (req, res) => {
+  const { title, artist, query } = req.body;
+  const targetTitle = (title || query || '').trim();
+  const targetArtist = (artist || '').trim();
+
+  if (!targetTitle) {
+    return res.status(400).json({ error: 'Título ou nome da música é obrigatório' });
+  }
+
+  // 1. Check curated database first or as instant fallback
+  const cachedMatch = findInWebChordDatabase(targetTitle, targetArtist);
+
+  // If Gemini client is not initialized, return cached or template
+  if (!ai) {
+    if (cachedMatch) {
+      return res.json({
+        title: cachedMatch.title,
+        artist: cachedMatch.artist,
+        suggestedKey: cachedMatch.key,
+        bpm: cachedMatch.bpm,
+        timeSignature: cachedMatch.timeSignature,
+        chordProContent: cachedMatch.chordProContent,
+        confidence: 'alta',
+        musicalNotes: cachedMatch.notes || 'Cifra oficial obtida do banco web de cifras.',
+        sourceUrls: [{ title: 'Cifra Club / Web', uri: cachedMatch.sourceUrl }],
+        searchedOnWeb: true,
       });
     }
-    if (!title) {
-      return res.status(400).json({ error: 'Título é obrigatório' });
-    }
-    if (!ai) {
-      return res.status(503).json({
-        error: 'Chave Gemini API não configurada. Você pode digitar ou colar a cifra manualmente.',
-      });
-    }
+    return res.status(503).json({
+      error: 'Chave Gemini API não configurada no servidor. Use a importação de arquivo ou digite a cifra.',
+    });
+  }
 
-    const prompt = `Você é um músico e arranjador especialista no app CifraViva.
-Gere a estrutura de acordes e letra no formato padrão ChordPro para a canção:
-Título: "${title}"
-Artista/Referência: "${artist || 'Tradicional'}"
+  // 2. Try Gemini with Google Search Grounding
+  try {
+    const prompt = `Você é um músico, arranjador e pesquisador musical do CifraViva.
+Sua missão é pesquisar na web e retornar a cifra real e completa com letra no formato ChordPro para:
+Música: "${targetTitle}"
+Artista/Compositor: "${targetArtist || 'Não informado (pesquise a versão mais conhecida)'}"
 
-Regras Críticas:
-1. Respeite os direitos autorais: se a música for moderna protegida por copyright, use uma versão reduzida/didática com progressão harmônica funcional, ou indique que é uma cifra simplificada de referência harmônica. Se for hino ou domínio público, forneça completo.
-2. Use a sintaxe padrão ChordPro com acordes entre colchetes exatamente sobre a sílaba correspondente, ex: "[G]Santo, [D]Santo, [Em]Santo, [C]Deus Onipo[D]tente".
-3. Use seções como {title: ...}, {artist: ...}, {key: ...}, {tempo: ...}, {comment: Intro}, {soc} (início de refrão), {eoc} (fim de refrão), [Verso 1], etc.
-4. Identifique o tom principal (ex: G, D, Am, etc.), BPM estimado e fórmula de compasso.
-5. Retorne os dados estritamente no formato JSON solicitado.`;
+Instruções Importantes:
+1. Use as ferramentas de busca na web para encontrar a cifra verdadeira, os acordes exatos e a letra completa (como disponível no Cifra Club, cifras.com.br, etc.).
+2. Converta o resultado para a sintaxe padrão ChordPro, colocando os acordes entre colchetes exatamente sobre a sílaba correspondente, por exemplo:
+"[G]Eu sei que a vida [D7]guarda sur[Em]presas..."
+3. Inclua a estrutura padrão com comentários de seções:
+{title: ${targetTitle}}
+{artist: ${targetArtist || 'Artista'}}
+{key: Tom Principal}
+{tempo: BPM Estimado}
+{comment: Intro: [Acordes]}
+{soc}
+{comment: Refrão}
+...
+{eoc}
+4. Indique o tom principal identificado (suggestedKey), andamento (bpm), fórmula de compasso (timeSignature) e uma breve nota sobre o arranjo harmônico.
+5. Responda ESTRITAMENTE em formato JSON dentro de um bloco \`\`\`json ... \`\`\` com os seguintes campos:
+{
+  "title": string,
+  "artist": string,
+  "suggestedKey": string,
+  "bpm": number,
+  "timeSignature": string,
+  "chordProContent": string,
+  "confidence": "alta" | "media",
+  "musicalNotes": string
+}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            artist: { type: Type.STRING },
-            suggestedKey: { type: Type.STRING },
-            bpm: { type: Type.INTEGER },
-            timeSignature: { type: Type.STRING },
-            chordProContent: { type: Type.STRING },
-            confidence: { type: Type.STRING, description: 'alta, média ou baixa' },
-            musicalNotes: { type: Type.STRING, description: 'Observações de harmonia e compasso' },
-          },
-          required: ['title', 'suggestedKey', 'chordProContent'],
+    const response = await callGeminiWithRetry(async () => {
+      return await ai!.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
         },
-      },
+      });
     });
 
-    const parsed = JSON.parse(response.text || '{}');
-    res.json(parsed);
+    const parsed = extractJsonFromModelText(response.text || '{}');
+
+    // Extract web source URLs from grounding chunks
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const sourceUrls = chunks
+      .map((c: any) => (c.web ? { title: c.web.title, uri: c.web.uri } : null))
+      .filter(Boolean);
+
+    return res.json({
+      ...parsed,
+      sourceUrls,
+      searchedOnWeb: true,
+    });
   } catch (error: any) {
-    console.error('Erro na sugestão de cifras Gemini:', error);
-    res.status(500).json({ error: error.message || 'Erro ao gerar sugestão de cifra' });
+    console.warn('Busca online via Gemini falhou ou sofreu rate-limit. Verificando fallback do acervo...', error?.message);
+
+    // If Gemini failed (e.g. 429 quota limit), use curated database match if available
+    if (cachedMatch) {
+      return res.json({
+        title: cachedMatch.title,
+        artist: cachedMatch.artist,
+        suggestedKey: cachedMatch.key,
+        bpm: cachedMatch.bpm,
+        timeSignature: cachedMatch.timeSignature,
+        chordProContent: cachedMatch.chordProContent,
+        confidence: 'alta',
+        musicalNotes: `${cachedMatch.notes || ''} (Cifra autêntica recuperada do banco de dados de cifras da web)`,
+        sourceUrls: [{ title: 'Cifra Club / Web', uri: cachedMatch.sourceUrl }],
+        searchedOnWeb: true,
+        fallbackUsed: true,
+      });
+    }
+
+    // Generic structured template with direct web search link
+    const searchUrl = `https://www.google.com/search?q=cifra+${encodeURIComponent(targetTitle + ' ' + targetArtist)}`;
+    const cifraClubUrl = `https://www.cifraclub.com.br/?q=${encodeURIComponent(targetTitle + ' ' + targetArtist)}`;
+
+    return res.status(503).json({
+      error: `A API de busca de IA atingiu temporariamente o limite de requisições (Quota/Rate Limit). Você pode abrir a cifra no Cifra Club e colá-la aqui diretamente.`,
+      cifraClubUrl,
+      searchUrl,
+    });
   }
 });
 
@@ -364,6 +476,138 @@ Forneça uma análise aprofundada:
     res.status(500).json({ error: error.message || 'Erro ao gerar insights do repertório' });
   }
 });
+
+// -----------------------------------------------------------------------------
+// SUPABASE INTEGRATION ENDPOINTS (Configured via secrets in environment)
+// -----------------------------------------------------------------------------
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const supabaseKey =
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  '';
+
+let supabaseClient: any = null;
+if (supabaseUrl && supabaseKey) {
+  try {
+    supabaseClient = createClient(supabaseUrl, supabaseKey);
+  } catch (e) {
+    console.warn('Erro ao inicializar cliente Supabase no servidor:', e);
+  }
+}
+
+// Check Supabase connection status
+app.get('/api/supabase/status', (_req, res) => {
+  res.json({
+    configured: !!(supabaseUrl && supabaseKey),
+    url: supabaseUrl ? supabaseUrl.replace(/https?:\/\//, '').split('.')[0] + '.supabase.co' : null,
+    message: supabaseClient
+      ? 'Supabase conectado com sucesso via secrets'
+      : 'Credenciais SUPABASE_URL e SUPABASE_ANON_KEY aguardando injeção nos secrets',
+  });
+});
+
+// Sync / Upsert songs from client to Supabase
+app.post('/api/supabase/sync', async (req, res) => {
+  try {
+    if (!supabaseClient) {
+      return res.status(400).json({
+        error: 'Supabase não está configurado. Verifique as chaves SUPABASE_URL e SUPABASE_ANON_KEY nos secrets.',
+        configured: false,
+      });
+    }
+
+    const { songs } = req.body;
+    if (!Array.isArray(songs) || songs.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma música enviada para sincronização.' });
+    }
+
+    // Format songs for Supabase table
+    const records = songs.map((s: any) => ({
+      id: s.id,
+      title: s.title,
+      artist: s.artist || '',
+      original_key: s.originalKey || 'G',
+      current_key: s.currentKey || 'G',
+      bpm: s.bpm || 100,
+      time_signature: s.timeSignature || '4/4',
+      chordpro_content: s.chordProContent || '',
+      tags: s.tags || [],
+      status: s.status || 'pronto',
+      type: s.type || 'repertorio',
+      workspace_id: s.workspaceId || 'ws-ss-clarinetes',
+      updated_at: new Date().toISOString(),
+    }));
+
+    // Upsert into 'songs' table
+    const { data, error } = await supabaseClient
+      .from('songs')
+      .upsert(records, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Erro ao fazer upsert no Supabase:', error);
+      return res.status(500).json({
+        error: `Erro no Supabase: ${error.message}. Verifique se a tabela 'songs' existe no Supabase.`,
+      });
+    }
+
+    res.json({
+      success: true,
+      syncedCount: records.length,
+      message: `${records.length} músicas sincronizadas com sucesso no Supabase!`,
+    });
+  } catch (err: any) {
+    console.error('Erro geral ao sincronizar com Supabase:', err);
+    res.status(500).json({ error: err.message || 'Erro ao sincronizar com Supabase' });
+  }
+});
+
+// Pull songs from Supabase to client
+app.get('/api/supabase/songs', async (_req, res) => {
+  try {
+    if (!supabaseClient) {
+      return res.status(400).json({
+        error: 'Supabase não configurado nos secrets.',
+        configured: false,
+      });
+    }
+
+    const { data, error } = await supabaseClient
+      .from('songs')
+      .select('*')
+      .order('title', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Convert snake_case from DB back to camelCase Song object
+    const songs = (data || []).map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      artist: row.artist,
+      originalKey: row.original_key || 'G',
+      currentKey: row.current_key || 'G',
+      bpm: row.bpm || 100,
+      timeSignature: row.time_signature || '4/4',
+      chordProContent: row.chordpro_content || '',
+      tags: row.tags || [],
+      status: row.status || 'pronto',
+      type: row.type || 'repertorio',
+      origin: 'sugestao_ia',
+      workspaceId: row.workspace_id || 'ws-ss-clarinetes',
+      updatedAt: row.updated_at || new Date().toISOString(),
+    }));
+
+    res.json({ songs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Vite Middleware for development
 async function startServer() {
