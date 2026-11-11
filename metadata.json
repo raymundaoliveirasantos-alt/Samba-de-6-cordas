@@ -1,0 +1,6 @@
+{
+  "name": "CifraViva",
+  "description": "App de cifras e repertório para bandas e músicos com ChordPro, transposição, ferramentas de palco e importação de Word e PDF.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

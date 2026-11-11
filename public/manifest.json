@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "CifraViva — Cifras e Palco",
+  "short_name": "CifraViva",
+  "description": "App de cifras e repertório para bandas e músicos com ChordPro, transposição, ferramentas de palco e importação de Word e PDF.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
