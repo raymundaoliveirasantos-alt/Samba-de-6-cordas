@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { parseChordPro } from '../../utils/chordPro';
 import { postJson } from '../../utils/api';
+import { searchChordsWithGroq, isGroqAvailable } from '../../utils/groqClient';
 import { ALL_KEYS } from '../../utils/transposer';
 import type { Song } from '../../types';
 
@@ -76,13 +77,33 @@ export const WebChordSearchModal: React.FC<WebChordSearchModalProps> = ({
     setResult(null);
 
     try {
-      const data = await postJson<any>('/api/gemini/suggest-chords', {
-        title: searchTitle.trim(),
-        artist: searchArtist.trim(),
-      });
-
-      if (data.error && !data.chordProContent) {
-        throw new Error(data.error);
+      let data: any;
+      let usedGroq = false;
+      try {
+        data = await postJson<any>('/api/gemini/suggest-chords', {
+          title: searchTitle.trim(),
+          artist: searchArtist.trim(),
+        });
+        if (data.error && !data.chordProContent) {
+          throw new Error(data.error);
+        }
+      } catch (serverErr: any) {
+        // Contorno: se o servidor (Vercel) falhar e houver chave Groq no cliente, usa Groq direto.
+        if (isGroqAvailable()) {
+          const groqResult = await searchChordsWithGroq(searchTitle.trim(), searchArtist.trim());
+          data = {
+            title: groqResult.title,
+            artist: groqResult.artist,
+            suggestedKey: groqResult.suggestedKey,
+            bpm: groqResult.bpm,
+            chordProContent: groqResult.chordProContent,
+            sourceUrls: [],
+            musicalNotes: groqResult.musicalNotes,
+          };
+          usedGroq = true;
+        } else {
+          throw serverErr;
+        }
       }
 
       setResult({
@@ -92,15 +113,19 @@ export const WebChordSearchModal: React.FC<WebChordSearchModalProps> = ({
         bpm: data.bpm || 100,
         chordProContent: data.chordProContent || '',
         sourceUrls: data.sourceUrls || [],
-        musicalNotes: data.musicalNotes,
+        musicalNotes: usedGroq
+          ? (data.musicalNotes || '') + ' (via Groq)'
+          : data.musicalNotes,
       });
     } catch (err: any) {
       console.warn('Erro ao buscar na web:', err);
       
       let message = err.message || 'Não foi possível obter a cifra automaticamente.';
       
-      if (message.includes('429') || message.includes('RESOURCE_EXHAUSTED')) {
-        message = 'A cota da sua API Gemini foi atingida. Verifique sua conta no Google AI Studio (aistudio.google.com/docs/rate-limits) ou tente novamente mais tarde.';
+      if (!isGroqAvailable() && (message.includes('404') || message.includes('Servidor de IA não encontrado'))) {
+        message = 'Servidor de IA indisponível. Para usar IA direto no navegador, configure VITE_GROQ_API_KEY (Groq, grátis) nas variáveis da Vercel e faça Redeploy. Ou cole a cifra manualmente abaixo.';
+      } else if (message.includes('429') || message.includes('RESOURCE_EXHAUSTED')) {
+        message = 'A cota da sua API foi atingida. Verifique sua conta ou tente novamente mais tarde.';
       } else {
         message += ' Você pode abrir o link abaixo e colar a cifra manualmente.';
       }
