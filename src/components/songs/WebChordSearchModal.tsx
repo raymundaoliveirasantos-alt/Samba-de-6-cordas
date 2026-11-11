@@ -107,10 +107,16 @@ export const WebChordSearchModal: React.FC<WebChordSearchModalProps> = ({
       });
     } catch (err: any) {
       console.warn('Erro ao buscar na web:', err);
-      setErrorMessage(
-        err.message ||
-          'Não foi possível obter a cifra automaticamente. Você pode abrir o link no Cifra Club abaixo e colar a cifra diretamente!'
-      );
+      
+      let message = err.message || 'Não foi possível obter a cifra automaticamente.';
+      
+      if (message.includes('429') || message.includes('RESOURCE_EXHAUSTED')) {
+        message = 'A cota da sua API Gemini foi atingida. Verifique sua conta no Google AI Studio (aistudio.google.com/docs/rate-limits) ou tente novamente mais tarde.';
+      } else {
+        message += ' Você pode abrir o link abaixo e colar a cifra manualmente.';
+      }
+      
+      setErrorMessage(message);
     } finally {
       setLoading(false);
     }

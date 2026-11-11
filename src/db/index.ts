@@ -43,18 +43,4 @@ export async function initializeDatabase() {
   }
 }
 
-// Helper to reset to demo seed data if requested by user
-export async function resetToDemoData() {
-  await db.songs.clear();
-  await db.setlists.clear();
-  await db.workspaces.clear();
-  await db.members.clear();
-  await db.events.clear();
-  await db.importJobs.clear();
 
-  await db.workspaces.bulkAdd(initialWorkspaces);
-  await db.songs.bulkAdd(initialSongs);
-  await db.setlists.bulkAdd(initialSetlists);
-  await db.members.bulkAdd(initialMembers);
-  await db.events.bulkAdd(initialEvents);
-}

@@ -11,23 +11,14 @@ import {
   Tv,
 } from 'lucide-react';
 import { useAppStore } from '../store';
-import { resetToDemoData } from '../db';
 import { PWAInstallButton } from '../components/common/PWAInstallButton';
-import { DemoBadge } from '../components/common/DemoBadge';
+
 
 export const SettingsView: React.FC = () => {
   const { userPlan, setUserPlan, preferences, updatePreferences } = useAppStore();
   const [resetSuccess, setResetSuccess] = useState(false);
 
-  const handleResetData = async () => {
-    if (confirm('Deseja restaurar o banco de dados para os dados originais de demonstração (incluindo as 47 músicas do REPERTÓRIO SSC II — 2026 e hinos)?')) {
-      await resetToDemoData();
-      setResetSuccess(true);
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-    }
-  };
+
 
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 p-4 md:p-8 max-w-4xl mx-auto w-full space-y-8">
@@ -209,28 +200,7 @@ export const SettingsView: React.FC = () => {
         <PWAInstallButton />
       </div>
 
-      {/* 4. DATABASE RESET TO DEMO SEED */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
-        <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-          <RotateCcw className="w-5 h-5 text-amber-400" /> Restaurar Dados de Demonstração
-        </h2>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Restaura o banco local para as 47 músicas esqueleto do REPERTÓRIO SSC II — 2026, os hinos de domínio público com cifras completas, setlists e integrantes da equipe.
-        </p>
 
-        {resetSuccess && (
-          <div className="p-3 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-semibold">
-            Banco restaurado com sucesso! Recarregando...
-          </div>
-        )}
-
-        <button
-          onClick={handleResetData}
-          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-red-500/20 hover:text-red-300 text-slate-300 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5"
-        >
-          <RotateCcw className="w-4 h-4" /> Restaurar Banco Inicial (47 músicas SSC II)
-        </button>
-      </div>
     </div>
   );
 };

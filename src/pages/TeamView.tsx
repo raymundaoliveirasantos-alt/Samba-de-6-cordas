@@ -16,7 +16,7 @@ import {
 import { db } from '../db';
 import type { Member, EventSchedule, Setlist } from '../types';
 import { useAppStore } from '../store';
-import { DemoBadge } from '../components/common/DemoBadge';
+
 
 export const TeamView: React.FC = () => {
   const { currentWorkspaceId } = useAppStore();
@@ -107,7 +107,7 @@ export const TeamView: React.FC = () => {
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-100 tracking-tight">
               Equipe de Músicos & Escalas
             </h1>
-            <DemoBadge />
+
           </div>
           <p className="text-sm text-slate-400 mt-1">
             Gestão de integrantes, funções na banda, escalas de culto e confirmação de presença.

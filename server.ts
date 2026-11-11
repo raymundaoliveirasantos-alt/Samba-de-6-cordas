@@ -683,6 +683,12 @@ app.get('/api/supabase/songs', async (_req, res) => {
 });
 
 
+// Debug catch-all for API routes
+app.all('/api/*', (req, res) => {
+  console.warn(`API route not found: ${req.method} ${req.url}`);
+  res.status(404).json({ error: `Rota API não encontrada: ${req.url}` });
+});
+
 // Vite Middleware for development
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

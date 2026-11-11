@@ -18,7 +18,7 @@ import {
   User,
 } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { DemoBadge } from './DemoBadge';
+
 import { db } from '../../db';
 import type { Workspace } from '../../types';
 
@@ -183,7 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right Actions: Demo badge, Import, New Song, Stage Mode */}
         <div className="flex items-center gap-2">
           {/* Demo Local Badge */}
-          <DemoBadge className="hidden sm:inline-flex" />
+
 
           {/* Quick Web Search Button */}
           {onOpenWebSearch && (
