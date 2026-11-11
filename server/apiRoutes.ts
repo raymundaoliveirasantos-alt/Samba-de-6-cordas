@@ -672,14 +672,18 @@ router.get('/api/supabase/songs', async (_req, res) => {
       artist: row.artist,
       originalKey: row.original_key || 'G',
       currentKey: row.current_key || 'G',
+      mode: 'major',
       bpm: row.bpm || 100,
       timeSignature: row.time_signature || '4/4',
+      capo: row.capo || 0,
       chordProContent: row.chordpro_content || '',
       tags: row.tags || [],
       status: row.status || 'pronto',
       type: row.type || 'repertorio',
       origin: 'sugestao_ia',
+      isFavorite: false,
       workspaceId: row.workspace_id || 'ws-ss-clarinetes',
+      createdAt: row.created_at || row.updated_at || new Date().toISOString(),
       updatedAt: row.updated_at || new Date().toISOString(),
     }));
 
