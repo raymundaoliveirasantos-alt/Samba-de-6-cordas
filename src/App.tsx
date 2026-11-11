@@ -325,6 +325,7 @@ export default function App() {
         }}
         onNewSong={handleCreateNewSong}
         onOpenWebSearch={() => handleOpenWebSearch()}
+        onOpenBatchSync={() => setIsBatchSyncModalOpen(true)}
       />
 
       {/* Main View Router */}
@@ -490,6 +491,16 @@ export default function App() {
         }}
         targetSong={webSearchTargetSong}
         onSaveChord={handleSaveWebChord}
+      />
+
+      {/* Batch Web Sync Modal (Update all songs from web in batch) */}
+      <BatchWebSyncModal
+        isOpen={isBatchSyncModalOpen}
+        onClose={() => setIsBatchSyncModalOpen(false)}
+        onSongsUpdated={() => {
+          // Trigger refresh if needed
+          setLibraryRefreshTrigger((prev) => prev + 1);
+        }}
       />
     </div>
   );

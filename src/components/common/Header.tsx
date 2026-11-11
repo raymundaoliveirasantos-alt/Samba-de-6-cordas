@@ -14,6 +14,7 @@ import {
   Plus,
   Upload,
   Globe,
+  RefreshCw,
 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { DemoBadge } from './DemoBadge';
@@ -191,6 +192,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Globe className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden lg:inline">Buscar na Web</span>
+            </button>
+          )}
+
+          {/* Batch Web Update Button */}
+          {onOpenBatchSync && (
+            <button
+              onClick={onOpenBatchSync}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-teal-500/20 hover:from-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/40 shadow transition cursor-pointer"
+              title="Atualizar todas as músicas na web de uma só vez"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+              <span className="hidden xl:inline">Atualizar Todas na Web</span>
             </button>
           )}
 
