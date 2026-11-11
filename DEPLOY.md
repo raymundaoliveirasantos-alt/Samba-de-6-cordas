@@ -23,15 +23,29 @@ server.ts             agora só monta as rotas e sobe o Vite/local
 Cada arquivo em `api/` é uma função serverless que reaproveita as mesmas rotas —
 não há lógica duplicada.
 
+## Contorno: IA direto no navegador (Groq)
+
+Se as funções serverless da Vercel não estiverem disponíveis, o app pode chamar
+o Groq diretamente do navegador. Para ativar:
+
+1. Crie uma conta gratuita em https://console.groq.com/keys e gere uma chave.
+2. Na Vercel: **Settings → Environment Variables →** `VITE_GROQ_API_KEY` = `gsk_...`
+   (marque Production/Preview/Development) e faça Redeploy.
+
+A chave fica exposta no bundle, então restrinja-a por domínio (HTTP referrer) no
+painel do Groq. O app tenta o servidor primeiro e, se falhar (404/500), usa o
+Groq automaticamente.
+
 ## Variáveis de ambiente na Vercel
 
 Projeto → **Settings → Environment Variables**
 
 | Variável | Obrigatória | Para quê |
 |---|---|---|
-| `GEMINI_API_KEY` | sim, para IA | busca inteligente, cifra na web, OCR de foto, insights |
-| `GROQ_API_KEY` | opcional | IA alternativa (Groq) |
-| `OPENROUTER_API_KEY` | opcional | IA alternativa (OpenRouter) |
+| `GEMINI_API_KEY` | sim, para IA (servidor) | busca inteligente, cifra na web, OCR de foto, insights |
+| `GROQ_API_KEY` | opcional (servidor) | IA alternativa (Groq) |
+| `OPENROUTER_API_KEY` | opcional (servidor) | IA alternativa (OpenRouter) |
+| `VITE_GROQ_API_KEY` | opcional (cliente) | contorno quando o servidor /api falha |
 | `SUPABASE_URL` | opcional | sincronização entre dispositivos |
 | `SUPABASE_ANON_KEY` | opcional | sincronização entre dispositivos |
 
