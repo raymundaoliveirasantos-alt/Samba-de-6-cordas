@@ -4,7 +4,7 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "functions": {
-    "api/*.ts": {
+    "api/**/*.ts": {
       "maxDuration": 60
     }
   }

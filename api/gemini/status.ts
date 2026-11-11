@@ -1,1 +1,4 @@
-export default function handler(req: any, res: any) { res.status(200).json({ ok: true, url: req.url }); }
+import app from '../../server/vercelApp';
+
+// Funcao serverless da Vercel: reaproveita as rotas de server/apiRoutes.ts.
+export default app;
