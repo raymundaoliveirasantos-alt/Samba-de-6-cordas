@@ -70,19 +70,46 @@ router.post('/api/groq/chat', async (req, res) => {
     if (!groqApiKey) {
       return res.status(503).json({ error: 'GROQ_API_KEY não configurada no servidor.' });
     }
-    const { messages, model = 'llama3-70b-8192' } = req.body;
-    
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${groqApiKey}`,
-      },
-      body: JSON.stringify({ model, messages, temperature: 0.3 }),
-    });
+    const { messages } = req.body;
 
-    const data = await response.json();
-    res.json(data);
+    // Modelos tentados em ordem. A Groq descontinua modelos com frequencia e
+    // o plano Developer (gratuito) nao tem acesso a `llama-3.3-70b-versatile`
+    // (404 model_not_found). Se o modelo pedido falhar, tentamos o proximo.
+    const requested = req.body?.model;
+    const candidates = [
+      ...(requested ? [requested] : []),
+      'openai/gpt-oss-120b',
+      'llama-3.1-8b-instant',
+      'llama-3.3-70b-versatile',
+    ].filter((m, i, arr) => arr.indexOf(m) === i);
+
+    let lastError = 'Groq nao respondeu.';
+    for (const model of candidates) {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${groqApiKey}`,
+        },
+        body: JSON.stringify({ model, messages, temperature: 0.3 }),
+      });
+
+      const txt = await response.text();
+      if (response.ok) {
+        try {
+          return res.json(JSON.parse(txt));
+        } catch {
+          return res.status(502).json({ error: 'Resposta invalida do Groq.' });
+        }
+      }
+
+      lastError = `Groq ${response.status}: ${txt.slice(0, 300)}`;
+      // modelo inexistente nesta conta -> tenta o proximo
+      if (response.status === 404 && /model_not_found|does not exist/i.test(txt)) continue;
+      return res.status(response.status).json({ error: lastError });
+    }
+
+    return res.status(404).json({ error: lastError });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

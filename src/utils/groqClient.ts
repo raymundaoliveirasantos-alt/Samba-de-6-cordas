@@ -10,7 +10,20 @@
  */
 const GROQ_API_KEY = (import.meta as any).env?.VITE_GROQ_API_KEY || '';
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.3-70b-versatile';
+
+/**
+ * Modelos tentados em ordem.
+ *
+ * A Groq descontinua modelos com frequencia e o plano gratuito (Developer)
+ * nao tem acesso a `llama-3.3-70b-versatile` (que responde 404
+ * "model_not_found"). Por isso tentamos varias opcoes e caimos para a
+ * seguinte quando o modelo nao existe na conta.
+ */
+const GROQ_MODELS = [
+  'openai/gpt-oss-120b',
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+];
 
 export function isGroqAvailable(): boolean {
   return !!GROQ_API_KEY;
@@ -49,44 +62,67 @@ Responda APENAS com um JSON válido (sem markdown, sem texto extra) no formato:
 Use acordes reais e conhecidos da música. Se não souber a música exata, crie uma cifra
 plausível no estilo. O chordProContent deve ter acordes entre colchetes sobre as sílabas.`;
 
-  const res = await fetch(GROQ_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
-      max_tokens: 2000,
-      response_format: { type: 'json_object' },
-    }),
-  });
+  let lastError = '';
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Groq ${res.status}: ${txt.slice(0, 200)}`);
+  for (const model of GROQ_MODELS) {
+    let useJsonFormat = true;
+
+    // alguns modelos nao aceitam `response_format`; se recusarem, tentamos
+    // de novo sem o parametro antes de trocar de modelo.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(GROQ_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.4,
+          max_tokens: 2000,
+          ...(useJsonFormat ? { response_format: { type: 'json_object' } } : {}),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content || '';
+        let parsed: any;
+        try {
+          parsed = JSON.parse(content);
+        } catch {
+          // tenta extrair JSON do texto
+          const m = content.match(/\{[\s\S]*\}/);
+          if (m) parsed = JSON.parse(m[0]);
+          else throw new Error('Resposta do Groq não é JSON válido.');
+        }
+
+        return {
+          title: parsed.title || title,
+          artist: parsed.artist || artist,
+          suggestedKey: parsed.suggestedKey || 'G',
+          bpm: parsed.bpm || 100,
+          chordProContent: parsed.chordProContent || '',
+          musicalNotes: parsed.musicalNotes,
+        };
+      }
+
+      const txt = await res.text();
+      lastError = `Groq ${res.status}: ${txt.slice(0, 200)}`;
+
+      // modelo inexistente nesta conta -> proximo modelo
+      if (res.status === 404 && /model_not_found|does not exist/i.test(txt)) break;
+
+      // modelo existe mas nao aceita response_format -> tenta sem ele
+      if (res.status === 400 && /response_format|json_object/i.test(txt) && useJsonFormat) {
+        useJsonFormat = false;
+        continue;
+      }
+
+      throw new Error(lastError);
+    }
   }
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content || '';
-  let parsed: any;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    // tenta extrair JSON do texto
-    const m = content.match(/\{[\s\S]*\}/);
-    if (m) parsed = JSON.parse(m[0]);
-    else throw new Error('Resposta do Groq não é JSON válido.');
-  }
-
-  return {
-    title: parsed.title || title,
-    artist: parsed.artist || artist,
-    suggestedKey: parsed.suggestedKey || 'G',
-    bpm: parsed.bpm || 100,
-    chordProContent: parsed.chordProContent || '',
-    musicalNotes: parsed.musicalNotes,
-  };
+  throw new Error(lastError || 'Nenhum modelo do Groq respondeu.');
 }
