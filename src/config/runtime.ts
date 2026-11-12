@@ -19,11 +19,12 @@ export const SUPABASE_URL =
 /**
  * Chave anon/public do Supabase.
  *
- * Onde pegar: Supabase → Project Settings → API → "anon" / "public".
+ * Onde pegar: Supabase → Project Settings → API → "anon" / "public"
+ * (a chave nova `sb_publishable_...` também serve).
  * Vazia = sincronização entre dispositivos desativada.
  */
 export const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'COLE_A_CHAVE_ANON_DO_SUPABASE_AQUI';
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_d8u_IOhK-tCUhEnP-R_ujw_cz-C5o5i';
 
 /**
  * Chave da Groq (fallback de IA direto no navegador).
