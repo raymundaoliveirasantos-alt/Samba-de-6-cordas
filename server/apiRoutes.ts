@@ -78,6 +78,7 @@ router.post('/api/groq/chat', async (req, res) => {
     const requested = req.body?.model;
     const candidates = [
       ...(requested ? [requested] : []),
+      'openai/gpt-oss-20b',
       'openai/gpt-oss-120b',
       'llama-3.1-8b-instant',
       'llama-3.3-70b-versatile',

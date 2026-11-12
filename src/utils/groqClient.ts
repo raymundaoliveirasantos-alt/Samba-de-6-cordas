@@ -15,11 +15,13 @@ const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
  * Modelos tentados em ordem.
  *
  * A Groq descontinua modelos com frequencia e o plano gratuito (Developer)
- * nao tem acesso a `llama-3.3-70b-versatile` (que responde 404
- * "model_not_found"). Por isso tentamos varias opcoes e caimos para a
- * seguinte quando o modelo nao existe na conta.
+ * nao tem acesso a `llama-3.3-70b-versatile` nem a `llama-3.1-8b-instant`
+ * (ambos respondem 404 "model_not_found"). Verificado com a chave real:
+ * `openai/gpt-oss-20b` responde 200 e aceita JSON mode; o 120b responde 200
+ * mas exige prompt em JSON no JSON mode.
  */
 const GROQ_MODELS = [
+  'openai/gpt-oss-20b',
   'openai/gpt-oss-120b',
   'llama-3.1-8b-instant',
   'llama-3.3-70b-versatile',
@@ -114,8 +116,9 @@ plausível no estilo. O chordProContent deve ter acordes entre colchetes sobre a
       // modelo inexistente nesta conta -> proximo modelo
       if (res.status === 404 && /model_not_found|does not exist/i.test(txt)) break;
 
-      // modelo existe mas nao aceita response_format -> tenta sem ele
-      if (res.status === 400 && /response_format|json_object/i.test(txt) && useJsonFormat) {
+      // modelo existe mas nao aceita response_format (JSON mode) ->
+      // tentamos de novo sem o parametro antes de trocar de modelo
+      if (res.status === 400 && useJsonFormat && /response_format|json/i.test(txt)) {
         useJsonFormat = false;
         continue;
       }
