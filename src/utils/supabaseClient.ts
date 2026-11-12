@@ -1,12 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+  SUPABASE_URL as supabaseUrl,
+  SUPABASE_ANON_KEY as supabaseAnonKey,
+  isSupabaseConfigured,
+} from '../config/runtime';
 
-// Initialize Supabase client using environment variables
-// Note: In Vite, environment variables must be prefixed with VITE_ to be exposed to the browser,
-// or provided via server-side endpoints/injected secrets.
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export { isSupabaseConfigured };
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)

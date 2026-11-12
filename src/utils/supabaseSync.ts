@@ -1,6 +1,7 @@
 import { db } from '../db';
 import type { Song, Setlist } from '../types';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { SUPABASE_URL } from '../config/runtime';
 
 export interface SupabaseStatus {
   configured: boolean;
@@ -21,7 +22,7 @@ export async function checkSupabaseStatus(): Promise<SupabaseStatus> {
     if (isSupabaseConfigured) {
       return {
         configured: true,
-        url: (import.meta as any).env?.VITE_SUPABASE_URL || null,
+        url: SUPABASE_URL || null,
         message: 'Supabase configurado no cliente (VITE_SUPABASE_URL).',
       };
     }

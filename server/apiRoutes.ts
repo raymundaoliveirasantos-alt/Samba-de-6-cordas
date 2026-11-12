@@ -598,7 +598,12 @@ Forneça uma análise aprofundada:
 // -----------------------------------------------------------------------------
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+// URL do Supabase como fallback (mesma do cliente em src/config/runtime.ts).
+// As chaves continuam vindo dos secrets da Vercel.
+const SUPABASE_URL_FALLBACK = 'https://gkjsczfeidefkcunwopq.supabase.co';
+
+const supabaseUrl =
+  process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || SUPABASE_URL_FALLBACK;
 const supabaseKey =
   process.env.SUPABASE_ANON_KEY ||
   process.env.SUPABASE_KEY ||

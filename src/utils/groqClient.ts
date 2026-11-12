@@ -8,7 +8,8 @@
  * Para ativar: defina VITE_GROQ_API_KEY no .env (local) ou nas Environment
  * Variables da Vercel.
  */
-const GROQ_API_KEY = (import.meta as any).env?.VITE_GROQ_API_KEY || '';
+import { GROQ_API_KEY } from '../config/runtime';
+
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
