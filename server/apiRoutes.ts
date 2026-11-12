@@ -16,8 +16,14 @@ const router = express.Router();
 const jsonParser = express.json({ limit: '25mb' });
 
 // Na Vercel o corpo já chega parseado; no servidor local precisamos parsear.
+// O `req.body` da Vercel é um getter que lança erro em JSON malformado,
+// por isso o acesso é protegido para responder 400 em vez de 500.
 router.use((req, res, next) => {
-  if (req.body !== undefined) return next();
+  try {
+    if (req.body !== undefined) return next();
+  } catch {
+    return res.status(400).json({ error: 'Corpo da requisição inválido: JSON malformado.' });
+  }
   return jsonParser(req, res, next);
 });
 

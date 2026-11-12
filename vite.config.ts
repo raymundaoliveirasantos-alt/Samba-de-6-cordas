@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath } from 'node:url';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
@@ -8,7 +8,10 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        // `fileURLToPath(new URL(...))` funciona tanto no loader empacotado
+        // (padrão atual) quanto no loader nativo do Vite (padrão futuro),
+        // onde `__dirname` não existe.
+        '@': fileURLToPath(new URL('.', import.meta.url)),
       },
     },
     server: {
