@@ -264,6 +264,7 @@ function extractJsonFromModelText(text: string): any {
 }
 
 import { findInWebChordDatabase } from '../src/utils/webChordsDatabase.js';
+import { parseSscTags, sscOrderInBlock } from '../src/utils/sscTags.js';
 
 // Search chords on the web using Google Search Grounding + Curated Fallback
 router.post('/api/gemini/suggest-chords', async (req, res) => {
@@ -700,26 +701,33 @@ router.get('/api/supabase/songs', async (_req, res) => {
     }
 
     // Convert snake_case from DB back to camelCase Song object
-    const songs = (data || []).map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      artist: row.artist,
-      originalKey: row.original_key || 'G',
-      currentKey: row.current_key || 'G',
-      mode: 'major',
-      bpm: row.bpm || 100,
-      timeSignature: row.time_signature || '4/4',
-      capo: row.capo || 0,
-      chordProContent: row.chordpro_content || '',
-      tags: row.tags || [],
-      status: row.status || 'pronto',
-      type: row.type || 'repertorio',
-      origin: 'sugestao_ia',
-      isFavorite: false,
-      workspaceId: row.workspace_id || 'ws-ss-clarinetes',
-      createdAt: row.created_at || row.updated_at || new Date().toISOString(),
-      updatedAt: row.updated_at || new Date().toISOString(),
-    }));
+    const songs = (data || []).map((row: any) => {
+      // Bloco e instrumento não têm colunas no Supabase: vêm nas tags.
+      const ssc = parseSscTags(row.tags);
+      const orderInBlock = row.order_in_block ?? sscOrderInBlock(row.id, ssc.block);
+      return {
+        id: row.id,
+        title: row.title,
+        artist: row.artist,
+        originalKey: row.original_key || 'G',
+        currentKey: row.current_key || 'G',
+        mode: 'major',
+        bpm: row.bpm || 100,
+        timeSignature: row.time_signature || '4/4',
+        capo: row.capo || 0,
+        chordProContent: row.chordpro_content || '',
+        tags: row.tags || [],
+        status: row.status || 'pronto',
+        type: row.type || 'repertorio',
+        origin: 'sugestao_ia',
+        isFavorite: false,
+        workspaceId: row.workspace_id || 'ws-ss-clarinetes',
+        ...(ssc.block ? { block: ssc.block, orderInBlock } : {}),
+        ...(ssc.instrument ? { instrument: ssc.instrument } : {}),
+        createdAt: row.created_at || row.updated_at || new Date().toISOString(),
+        updatedAt: row.updated_at || new Date().toISOString(),
+      };
+    });
 
     res.json({ songs });
   } catch (err: any) {

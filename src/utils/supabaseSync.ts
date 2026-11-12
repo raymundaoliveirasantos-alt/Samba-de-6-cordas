@@ -93,6 +93,70 @@ export async function syncLocalSongsToSupabase(): Promise<{
   }
 }
 
+/**
+ * Carrega o repertório oficial do Supabase para o banco local.
+ *
+ * Política de merge (não destrutiva):
+ * - música que não existe localmente -> cria;
+ * - música local que ainda não tem cifra -> completa com a do Supabase;
+ * - música já editada pelo usuário -> **não** é sobrescrita.
+ */
+export async function mergeSongsFromSupabase(): Promise<{
+  success: boolean;
+  message: string;
+  count?: number;
+}> {
+  try {
+    const res = await fetch('/api/supabase/songs');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const remoteSongs: Song[] = data.songs || [];
+    if (!remoteSongs.length) {
+      return { success: true, count: 0, message: 'Nenhuma música encontrada no Supabase.' };
+    }
+
+    const local = await db.songs.toArray();
+    const localById = new Map(local.map((s) => [s.id, s]));
+    const toPut: Song[] = [];
+
+    for (const remote of remoteSongs) {
+      const mine = localById.get(remote.id);
+      if (!mine) {
+        toPut.push(remote);
+        continue;
+      }
+      if (!mine.chordProContent && remote.chordProContent) {
+        toPut.push({
+          ...mine,
+          chordProContent: remote.chordProContent,
+          bpm: remote.bpm,
+          timeSignature: remote.timeSignature,
+          status: remote.status === 'pendente' ? mine.status : remote.status,
+          artist: mine.artist || remote.artist,
+          tags: remote.tags?.length ? remote.tags : mine.tags,
+          block: remote.block ?? mine.block,
+          orderInBlock: remote.orderInBlock ?? mine.orderInBlock,
+          instrument: remote.instrument ?? mine.instrument,
+        });
+      }
+    }
+
+    if (toPut.length) await db.songs.bulkPut(toPut);
+    return {
+      success: true,
+      count: toPut.length,
+      message: toPut.length
+        ? `${toPut.length} músicas do repertório carregadas do Supabase.`
+        : 'Acervo já está atualizado.',
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      message: e?.message || 'Não foi possível carregar o repertório do Supabase.',
+    };
+  }
+}
+
 export async function pullSongsFromSupabase(): Promise<{
   success: boolean;
   message: string;

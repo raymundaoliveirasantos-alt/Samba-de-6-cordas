@@ -7,3 +7,7 @@ coverage/
 .env*
 !.env.example
 .vercel
+# scripts temporarios de manutencao
+extract-pdf.mjs
+test-seed.mts
+repertorio-texto.txt

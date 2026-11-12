@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeDatabase, db } from './db';
+import { mergeSongsFromSupabase } from './utils/supabaseSync';
 import type { Song, Setlist } from './types';
 import { Header } from './components/common/Header';
 import { BottomNav } from './components/common/BottomNav';
@@ -70,7 +71,17 @@ export default function App() {
   const isProjectionWindow = typeof window !== 'undefined' && window.location.pathname.includes('/projection');
 
   useEffect(() => {
-    initializeDatabase().then(() => {
+    initializeDatabase().then(async () => {
+      // Carrega o repertório oficial (Supabase) sem sobrescrever edições
+      // locais. Timeout de 4s para o app nunca demorar a abrir.
+      try {
+        await Promise.race([
+          mergeSongsFromSupabase(),
+          new Promise((resolve) => setTimeout(resolve, 4000)),
+        ]);
+      } catch (e) {
+        console.warn('Não foi possível carregar o repertório do Supabase:', e);
+      }
       setIsInitialized(true);
     });
   }, []);
