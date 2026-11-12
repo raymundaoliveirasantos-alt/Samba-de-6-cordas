@@ -235,7 +235,7 @@ function extractJsonFromModelText(text: string): any {
   }
 }
 
-import { findInWebChordDatabase } from '../src/utils/webChordsDatabase';
+import { findInWebChordDatabase } from '../src/utils/webChordsDatabase.js';
 
 // Search chords on the web using Google Search Grounding + Curated Fallback
 router.post('/api/gemini/suggest-chords', async (req, res) => {

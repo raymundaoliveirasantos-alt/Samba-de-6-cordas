@@ -1,4 +1,4 @@
-import app from '../../server/vercelApp';
+import app from '../../server/vercelApp.js';
 
 /**
  * Funções serverless da Vercel para /api/gemini/*.
