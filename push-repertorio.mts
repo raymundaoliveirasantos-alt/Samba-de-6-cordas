@@ -50,12 +50,15 @@ for (const seed of initialSongs) {
   const iguais =
     row.title === seed.title &&
     (row.artist || '') === (seed.artist || '') &&
-    row.original_key === seed.originalKey &&
+    row.originalKey === seed.originalKey &&
     row.status === seed.status &&
-    (row.chordpro_content || '') === (seed.chordProContent || '');
+    (row.chordProContent || '') === (seed.chordProContent || '');
   if (iguais) ok++;
-  else divergentes.push(`${seed.id}: divergente (${row.title} / ${row.status})`);
-  if ((row.chordpro_content || '').length > 0) comCifra++;
+  else
+    divergentes.push(
+      `${seed.id}: divergente (${row.title} | ${row.status} | chords=${(row.chordProContent || '').length} vs ${seed.chordProContent.length})`
+    );
+  if ((row.chordProContent || '').length > 0) comCifra++;
 }
 
 console.log(`\nTotal no Supabase      : ${songs.length}`);
@@ -67,6 +70,15 @@ divergentes.slice(0, 10).forEach((d) => console.log('   - ' + d));
 console.log('\n--- blocos no Supabase (conferindo cifras por bloco) ---');
 for (const b of ['I', 'II', 'III']) {
   const ids = initialSongs.filter((s) => s.block === b).map((s) => s.id);
-  const withChords = ids.filter((id) => (byId.get(id) as any)?.chordpro_content?.length > 0);
+  const withChords = ids.filter((id) => (byId.get(id) as any)?.chordProContent?.length > 0);
   console.log(`BLOCO ${b}: ${withChords.length}/${ids.length} com cifra`);
+}
+
+console.log('\n--- amostra lida de volta do Supabase ---');
+for (const id of ['ssc-song-3', 'ssc-song-11', 'ssc-song-39']) {
+  const row: any = byId.get(id);
+  if (!row) continue;
+  console.log(
+    `${id} | ${row.title} | ${row.artist} | key=${row.originalKey} | status=${row.status} | chords=${(row.chordProContent || '').length}ch | tags=${JSON.stringify(row.tags)} | block=${row.block ?? '-'} | instr=${row.instrument ?? '-'} | ordem=${row.orderInBlock ?? '-'}`
+  );
 }
