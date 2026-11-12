@@ -30,10 +30,15 @@ export const SUPABASE_ANON_KEY =
  * Chave da Groq (fallback de IA direto no navegador).
  *
  * Onde pegar: https://console.groq.com/keys
+ *
+ * ATENÇÃO: esta chave NÃO fica no Git — o secret scanning do GitHub bloqueia
+ * qualquer commit com padrão `gsk_...`. Ela é configurada como variável de
+ * ambiente `VITE_GROQ_API_KEY` no projeto Vercel (e `GROQ_API_KEY` para o
+ * servidor). Para desenvolvimento local, placeda no `.env.local`.
+ *
  * Vazia = a busca de cifras na web depende do servidor (/api).
  */
-export const GROQ_API_KEY =
-  import.meta.env.VITE_GROQ_API_KEY || 'COLE_A_CHAVE_DA_GROQ_AQUI';
+export const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || '';
 
 const PLACEHOLDER = 'COLE_A_CHAVE_';
 
